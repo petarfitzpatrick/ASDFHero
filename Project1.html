@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<title>ASDF Hero</title>
+	<style>
+	#logo{
+	text-align: center;
+	margin-bottom: -60px;
+	}
+	h1 {
+		font-size: 50px;
+		margin-bottom: -10px;
+		color: #909090;
+	}
+		
+	body {
+         background: black;
+         font-family: tahoma, verdana, sans serif;
+		 font-size: 20px;
+		 text-align: center;
+    	 margin: 0px;
+		 color: #a7a7a7;
+      }
+
+      canvas {
+	  
+        margin-left:10px;
+        margin-top:80px;
+        box-shadow: 4px 4px 8px rgba(0,0,0,0.5);
+        background: #191919;
+    }
+      
+      #controls{
+      	margin-left:10px;
+        margin-top:10px;
+     }
+	  
+	 div{
+		 display: inline;
+	 }
+	</style>
+	<!-- jQuery hotkeys -->
+	<script src="./js/jquery-1.7.1.js"></script>
+    <script src="./js/jquery.hotkeys.js"></script>
+    <script src="./js/key_status.js"></script>
+	<script>
+	// An IIFE ("Iffy") - see the notes in mycourses
+	(function(){
+		"use strict";
+		
+		var NUM_SAMPLES = 256;
+		var SOUND_1 = 'media/Phoebe Mine.mp3';
+		var SOUND_2 = 'media/The Picard Song.mp3';
+		var SOUND_3 = 'media/SyntactShallow.mp3';
+
+
+		var audioElement;
+		var analyserNode;
+		var canvas,ctx;
+		var invert = false, spawnOrbs=false, noise=false, lines=true;
+		var delayAmount = 0.5;
+		var delayNode;
+		var slider, orbSlider;
+		
+		var pulsate;
+		
+		var yPos = 0;
+		var points = 0;
+		var multiplier = 1;
+		var streak = 0;
+		var speed = 3;
+		
+		var row1 = [];
+		var row2 = [];
+		var row3 = [];
+		var row4 = [];
+		
+		var canQ1 = true, canQ2 = true, canQ3 = true,canQ4 = true,keyCheckA = false,keyCheckS = false,keyCheckD = false,keyCheckF = false,paused=false;
+	
+		var name = "";
+	
+		function init(){
+			// set up canvas stuff
+			canvas = document.querySelector('canvas');
+			ctx = canvas.getContext("2d");
+					
+			// get reference to <audio> element on page
+			audioElement = document.querySelector('audio');
+			
+			// call our helper function and get an analyser node
+			analyserNode = createWebAudioContextWithAnalyserNode(audioElement);
+			
+			// get sound track <select> and Full Screen button working
+			setupUI();
+			
+			// load and play default sound into audio element
+			playStream(audioElement,SOUND_3);
+			
+			
+			
+			// start animation loop
+			update();
+		}
+		
+		
+		
+		var Circle = function(x,y,color){
+		this.x = x;
+		this.y = y;
+		this.color = color;
+		this.draw = function(){
+			ctx.beginPath();
+			ctx.fillStyle = this.color;
+			ctx.arc(this.x,this.y, 50,0,2 * Math.PI, false);
+			ctx.closePath();
+			ctx.fill();
+			ctx.stroke();
+		}
+		this.update = function(speed){
+			this.y += speed;
+		}
+		}
+				
+		function createWebAudioContextWithAnalyserNode(audioElement) {
+			var audioCtx, analyserNode, sourceNode;
+			
+			
+			// create new AudioContext
+			// The || is because WebAudio has not been standardized across browsers yet
+			// http://webaudio.github.io/web-audio-api/#the-audiocontext-interface
+			audioCtx = new (window.AudioContext || window.webkitAudioContext);
+			
+			// create an analyser node
+			analyserNode = audioCtx.createAnalyser();
+			
+			/*
+			We will request NUM_SAMPLES number of samples or "bins" spaced equally 
+			across the sound spectrum.
+			
+			If NUM_SAMPLES (fftSize) is 256, then the first bin is 0 Hz, the second is 172 Hz, 
+			the third is 344Hz. Each bin contains a number between 0-255 representing 
+			the amplitude of that frequency.
+			*/ 
+			
+			// fft stands for Fast Fourier Transform
+			analyserNode.fftSize = NUM_SAMPLES;
+			
+			// this is where we hook up the <audio> element to the analyserNode
+			sourceNode = audioCtx.createMediaElementSource(audioElement); 
+			sourceNode.connect(analyserNode);
+			
+			// here we connect to the destination i.e. speakers
+			//
+			//analyserNode.connect(audioCtx.destination);
+			
+			//New for part 3
+			//Create delayNode
+			delayNode = audioCtx.createDelay();
+			//delayNode.delayTime.value = delayAmount;
+			
+			sourceNode.connect(audioCtx.destination);
+			
+			//Play and visualize delay
+			//sourceNode.connect(delayNode);
+			//delayNode.connect(analyserNode);
+			analyserNode.connect(audioCtx.destination);
+			
+			return analyserNode;
+		}
+		
+		function setupUI(){
+			
+			document.querySelector("#trackSelect").onchange = function(e){
+				//Reset everything
+				row1 = [];
+				row2 = [];
+				row3 = [];
+				row4 = [];
+				points = 0;
+
+				
+				playStream(audioElement,e.target.value);
+			};
+			
+			document.querySelector("#fsButton").onclick = function(){
+				requestFullscreen(canvas);
+			};
+		}
+		
+		function playStream(audioElement,path){
+			audioElement.src = path;
+			audioElement.play();
+			audioElement.volume = 0.2;
+			
+			name = path.slice(6, -4);
+		}
+		
+		function addCircle(passColor){
+			//circle.draw();
+		
+			if(passColor == 'red'){
+			var circle = new Circle(canvas.width/2 - 165,yPos,"#d02828");
+			row1.push(circle);
+			}
+			else if (passColor == 'green'){
+			var circle = new Circle(canvas.width/2 - 55 ,yPos,"#28d030");
+			row2.push(circle);
+			}
+			else if (passColor == 'blue'){
+			var circle = new Circle(canvas.width/2 + 55,yPos,"#283cd0");
+			row3.push(circle);
+			}
+			else if (passColor == 'yellow'){
+			var circle = new Circle(canvas.width/2 + 165,yPos,"#d0ca28");
+			row4.push(circle);
+			}
+		}
+		
+		function qTimer(boolVar){
+		 boolVar = true;
+		}
+		
+		function update() { 
+			// this schedules a call to the update() method in 1/60 seconds
+			
+				//key stuff
+			window.onkeyup = function(e){
+				var key = e.keyCode ? e.keyCode : e.which;
+				//key codes 65=a  68=D 70=F  83=S
+				if (key == 65){
+					keyCheckA = true;
+				}
+				else if (key == 68){
+					keyCheckD = true;
+				}
+				else if(key == 70){
+					keyCheckF = true;
+				}
+				else if(key ==83){
+					keyCheckS = true;
+				}
+				else if(key ==27){
+				if(paused){
+				audioElement.play();
+				paused = !paused
+				}
+				else if(!paused){
+					audioElement.pause();
+					paused = !paused;
+				}			
+				}
+			}	
+			requestAnimationFrame(update);
+			
+			//Check if the box is checked, and maintain whether this feature is on or not		
+			/*
+				Nyquist Theorem
+				http://whatis.techtarget.com/definition/Nyquist-Theorem
+				The array of data we get back is 1/2 the size of the sample rate 
+			*/
+			
+			// create a new array of 8-bit integers (0-255)
+			var data = new Uint8Array(125); 
+			
+			// populate the array with the frequency data
+			// notice these arrays can be passed "by reference" 
+			analyserNode.getByteFrequencyData(data);
+		
+			// OR
+			//analyserNode.getByteTimeDomainData(data); // waveform data
+			
+			// DRAW!
+			ctx.clearRect(0,0,1280,720);  
+			var barWidth = 8;
+			var barSpacing = 2;
+			var barHeight = 200;
+			var topSpacing = 80;
+			//var circle = new Circle(canvas.width/2 - 20,yPos,'red');		
+						
+			// loop through the data and draw!
+			if(!paused){
+
+			for(var i=0; i<data.length; i++) { 
+				var percent  = data[i] / 255;
+				var maxRadius = 200;
+				var circleRadius = percent * slider;
+				
+				ctx.fillStyle = 'rgba(145,61,136,0.8)'; 
+				if (i < 50){
+				ctx.fillRect(i * (barWidth + barSpacing),topSpacing + 256-data[i],barWidth,barHeight); 
+				ctx.fillRect(1280 -i * (barWidth + barSpacing),topSpacing + 256-data[i],barWidth,barHeight); 
+				}
+				// the higher the amplitude of the sample (bin) the taller the bar
+				// remember we have to draw our bars left-to-right and top-down
+				
+				//ctx.fillRect(i * (barWidth + barSpacing),topSpacing + 256-data[i],barWidth,barHeight); 
+				//ctx.fillRect(640 - i * (barWidth + barSpacing), topSpacing + 256 - data[i] - 20, barWidth, barHeight);
+				if(data[i] < 30 && data[i] > 0 && canQ1){
+					addCircle('red');
+					canQ1 = false;
+					setTimeout(function(){canQ1 = true;},1000);
+				}
+				else if (data[i] >= 30 && data[i] < 80 && canQ2){
+					addCircle('green');
+					canQ2 = false;
+					setTimeout(function(){canQ2 = true;},1500);
+
+				}
+				else if(data[i] >=80 && data[i] < 100 && canQ3){
+					addCircle('blue');
+					canQ3= false;
+					setTimeout(function(){canQ3 = true;},1750);
+
+				}
+				else if(data[i] >=100 && data[i] < 120 && canQ4){
+					addCircle('yellow');
+					canQ4 = false;
+					setTimeout(function(){canQ4 = true;},2000);
+
+				}
+				//For angle it is 2pi/255 multiplied by position (i)
+			}
+			//yPos ++;
+			
+		var img = document.getElementById("bg");
+        ctx.drawImage(img, canvas.width/2 - 240, 0);
+		
+		if(streak > 30){
+		speed = 5;
+		}
+		else if(streak  < 30){
+		speed = 3;
+		}
+			
+		for (var i = 0; i < row1.length; i++){
+				row1[i].draw();
+				row1[i].update(speed);
+			if(row1[0].y > canvas.height + 49){
+				row1.shift();
+				streak = 0;
+			}
+			if(keyCheckA){
+				if(row1[0].y > 650 && row1[0].y < 670){
+				points += 100 * multiplier;
+				row1.shift();
+				streak +=1;
+				}
+				else if(row1[0].y > 600 && row1[0].y < 650){
+				points += 50 * multiplier;
+				row1.shift();
+				streak +=1;
+				}
+				else if(row1[0].y > 650 && row1[0].y < 725){
+				points += 25 * multiplier;
+				row1.shift();
+				streak += 1;
+				}
+				else if(row1[0].y < 600){
+				points -= 50;
+				streak = 0;
+				}
+				keyCheckA = false;
+			}
+		}
+		for (var i = 0; i < row2.length; i++){
+			row2[i].draw();
+			row2[i].update(speed);
+			if(row2[0].y > canvas.height + 49){
+				row2.shift();
+				streak = 0;
+			}	
+				if(keyCheckS){
+				if(row2[0].y > 650 && row2[0].y < 670){
+				points += 100 * multiplier;
+				row2.shift();
+				streak +=1;
+				}
+				else if(row2[0].y > 600 && row2[0].y < 650){
+				points += 50 * multiplier;
+				row2.shift();
+				streak += 1;
+				}
+				else if(row2[0].y > 650 && row2[0].y < 725){
+				points += 25 * multiplier;
+				row2.shift();
+				streak += 1;
+				}
+				else if(row2[0].y < 600){
+				points -= 50;
+				streak = 0;
+				}
+				keyCheckS = false;
+			}
+		} 
+		for (var i = 0; i < row3.length; i++){
+			row3[i].draw();
+			row3[i].update(speed);
+			if(row3[0].y > canvas.height + 49){
+				row3.shift();
+				streak = 0;
+			}	
+				if(keyCheckD){
+				if(row3[0].y > 650 && row3[0].y < 670){
+				points += 100 * multiplier;
+				row3.shift();
+				streak +=1;
+				}
+				else if(row3[0].y > 600 && row3[0].y < 650){
+				points += 50 * multiplier;
+				row3.shift();
+				streak +=1;
+				}
+				else if(row3[0].y > 650 && row3[0].y < 725){
+				points += 25 * multiplier;
+				row3.shift();
+				streak +=1;
+				}
+				else if(row3[0].y < 600){
+				points -= 50;
+				streak = 0;
+				}
+				keyCheckD = false;
+			}
+		} 
+		
+		for (var i = 0; i < row4.length; i++){
+			row4[i].draw();
+			row4[i].update(speed);
+			if(row4[0].y > canvas.height + 49){
+				row4.shift();
+				streak = 0;
+			}	
+				if(keyCheckF){
+				if(row4[0].y > 650 && row4[0].y < 670){
+				points += 100 * multiplier;
+				row4.shift();
+				streak+=1;
+				}
+				else if(row4[0].y > 600 && row4[0].y < 650){
+				points += 50 * multiplier;
+				row4.shift();
+				streak +=1;
+				}
+				else if(row4[0].y > 650 && row4[0].y < 725){
+				points += 25 * multiplier;
+				row4.shift();
+				streak +=1;
+				}
+				else if(row4[0].y < 600){
+				points -= 50;
+				streak = 0;
+				}
+				keyCheckF = false;
+			}
+		} 
+				ctx.fillStyle = 'rgba(182,182,182,1.0)'; 
+				ctx.font="50px Tahoma";
+				ctx.fillText("Score: " + points, 30, 70);
+				ctx.fillText("Streak: " + streak,30,120);
+				//ctx.fillText("Multiplier:" + " " + multiplier + "X",900,70);
+				
+				ctx.font="24px Tahoma";
+				ctx.fillText("Now Playing:", 910, 650);
+				ctx.font="36px Tahoma";
+				ctx.fillText(name, 910, 690);
+				
+				ctx.fillStyle = 'rgba(255,255,255,0.2)'; 
+				ctx.fillRect(canvas.width/2 - 220, 600, 438, 140);
+				
+				//660 sweet spot  650 top of grid 670 bot
+			}
+			else if(paused){
+			var img2 = document.getElementById("pauseScreen");
+			ctx.drawImage(img2, canvas.width/2 - 240, 0);
+			}
+			
+			//var img3 = document.getElementById("logo");
+		//	ctx.drawImage(img3, canvas.width/2 - 320,-200);
+		} 
+		
+		
+		 // FULL SCREEN MODE
+		function requestFullscreen(element) {
+			if (element.requestFullscreen) {
+			  element.requestFullscreen();
+			} else if (element.mozRequestFullscreen) {
+			  element.mozRequestFullscreen();
+			} else if (element.mozRequestFullScreen) { // camel-cased 'S' was changed to 's' in spec
+			  element.mozRequestFullScreen();
+			} else if (element.webkitRequestFullscreen) {
+			  element.webkitRequestFullscreen();
+			}
+			// .. and do nothing if the method is not supported
+			//	<h1><div style="color: #d02828">A</div><div style="color: #28d030">S</div><div style="color: #283cd0">D</div><div style="color: #d0ca28">F</div> Hero</h1>
+
+		};
+		window.addEventListener("load",init);
+	}());
+		
+	</script>
+</head>
+<body>
+		<img id="logo" src="./media/gameLogo.png" width='648' height='250'>
+
+	
+	<canvas id="canvas" width="1280" height="720"></canvas>
+	<section id="controls">
+		<audio controls loop style="display: none"></audio>
+		
+		<br>
+		
+		<label>Track: 
+			<select id="trackSelect" >
+				<option  value="media/Phoebe Mine.mp3">Mine</option>
+				<option value="media/The Picard Song.mp3">The Picard Song</option>
+				<option selected value="media/SyntactShallow.mp3">Shallow</option>
+			</select>
+		</label>
+		
+		<br>	
+		
+		<img id="bg" src="./media/background1.png" style="display: none">
+		<img id="pauseScreen" src="./media/pausedScreen.png" style="display: none">
+
+
+		<button id="fsButton">Go Full Screen</button><br>
+	</section>
+</body>
+</html>
